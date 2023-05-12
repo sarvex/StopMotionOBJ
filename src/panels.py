@@ -120,7 +120,7 @@ class SMO_PT_MeshSequenceAdvancedPanel(bpy.types.Panel):
             row.operator("ms.deep_delete_sequence")
 
             layout.row().separator()
-            layout.row().label(text="Sequence version: " + objSettings.version.toString())
+            layout.row().label(text=f"Sequence version: {objSettings.version.toString()}")
 
 
 class SequenceImportSettings(bpy.types.PropertyGroup):
@@ -194,7 +194,7 @@ class ImportSequence(bpy.types.Operator, ImportHelper):
         # this needs to be set to True if dirPath is supposed to be relative
         # once the path is made relative, it will be set to False
         mss.dirPathNeedsRelativizing = mss.dirPathIsRelative
-        
+
         self.copyImportSettings(self.importSettings, mss.fileImporter)
 
         meshCount = 0
@@ -212,10 +212,10 @@ class ImportSequence(bpy.types.Operator, ImportHelper):
         if meshCount == 0:
             self.report({'ERROR'}, "No matching files found. Make sure the Root Folder, File Name, and File Format are correct.")
             return {'CANCELLED'}
-        
+
         # get the name of the first mesh, remove trailing numbers and _ and .
         firstMeshName = os.path.splitext(mss.meshNameArray[1].basename)[0].rstrip('._0123456789')
-        seqObj.name = firstMeshName + '_sequence'
+        seqObj.name = f'{firstMeshName}_sequence'
 
         return {'FINISHED'}
 

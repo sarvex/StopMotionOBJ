@@ -41,11 +41,7 @@ def deselectAll():
 
 # We have to use this function instead of bpy.context.selected_objects because there's no "selected_objects" within the render context
 def getSelectedObjects():
-    selected_objects = []
-    for ob in bpy.context.scene.objects:
-        if ob.select_get() is True:
-            selected_objects.append(ob)
-    return selected_objects
+    return [ob for ob in bpy.context.scene.objects if ob.select_get() is True]
 
 
 def createUniqueMeshName(basename):
@@ -109,12 +105,15 @@ def makeDirPathsRelative(scene):
 
     for obj in bpy.data.objects:
         mss = obj.mesh_sequence_settings
-        if mss.initialized is True and mss.loaded is True:
-            # if any are using relative paths that have not yet been relative-ized, then relative-ize them
-            if mss.dirPathIsRelative is True and mss.dirPathNeedsRelativizing is True:
-                newRelPath = bpy.path.relpath(mss.dirPath)
-                mss.dirPath = newRelPath
-                mss.dirPathNeedsRelativizing = False
+        if (
+            mss.initialized is True
+            and mss.loaded is True
+            and mss.dirPathIsRelative is True
+            and mss.dirPathNeedsRelativizing is True
+        ):
+            newRelPath = bpy.path.relpath(mss.dirPath)
+            mss.dirPath = newRelPath
+            mss.dirPathNeedsRelativizing = False
 
 
 # runs every time the start frame of an object is changed
@@ -133,7 +132,7 @@ def resizeCache(self, context):
         return None
 
     numMeshesToRemove = mss.numMeshesInMemory - mss.cacheSize
-    for i in range(numMeshesToRemove):
+    for _ in range(numMeshesToRemove):
         currentMeshIdx = getMeshIdxFromMeshKey(obj, obj.data.name)
         idxToDelete = nextCachedMeshToDelete(obj, currentMeshIdx)
         if idxToDelete >= 0:
@@ -143,14 +142,19 @@ def resizeCache(self, context):
 
 
 def getMeshIdxFromMeshKey(obj, meshKey):
-    for idx, meshNameItem in enumerate(obj.mesh_sequence_settings.meshNameArray):
-        if meshNameItem.key == meshKey:
-            return idx
-
-    return -1
+    return next(
+        (
+            idx
+            for idx, meshNameItem in enumerate(
+                obj.mesh_sequence_settings.meshNameArray
+            )
+            if meshNameItem.key == meshKey
+        ),
+        -1,
+    )
 
 def countMatchingFiles(_directory, _filePrefix, _fileExtension):
-    full_filepath = os.path.join(_directory, _filePrefix + '*.' + _fileExtension)
+    full_filepath = os.path.join(_directory, f'{_filePrefix}*.{_fileExtension}')
     files = glob.glob(full_filepath)
     return len(files)
 
@@ -176,10 +180,10 @@ class SequenceVersion(bpy.types.PropertyGroup):
         pass
 
     def toString(self):
-        mainVersionStr = str(self.versionMajor) + '.' + str(self.versionMinor) + '.' + str(self.versionRevision)
+        mainVersionStr = f'{str(self.versionMajor)}.{str(self.versionMinor)}.{str(self.versionRevision)}'
         if self.versionDevelopment == "":
             return mainVersionStr
-        return mainVersionStr + '.' + self.versionDevelopment
+        return f'{mainVersionStr}.{self.versionDevelopment}'
 
 class MeshImporter(bpy.types.PropertyGroup):
     # OBJ import parameters
@@ -450,7 +454,7 @@ def loadStreamingSequenceFromMeshFiles(obj, directory, filePrefix):
         return 0
 
     # load the first frame
-    wildcardAbsPath = os.path.join(absDirectory, filePrefix + '*.' + fileExtension)
+    wildcardAbsPath = os.path.join(absDirectory, f'{filePrefix}*.{fileExtension}')
     numFrames = 0
     numFramesInMemory = 0
     unsortedFilenames = glob.glob(wildcardAbsPath)
@@ -480,7 +484,7 @@ def loadSequenceFromMeshFiles(_obj, _dir, _file):
     if countMatchingFiles(full_dirpath, _file, fileExtension) == 0:
         return 0
 
-    full_filepath = os.path.join(full_dirpath, _file + '*.' + fileExtension)
+    full_filepath = os.path.join(full_dirpath, f'{_file}*.{fileExtension}')
     numFrames = 0
     unsortedFiles = glob.glob(full_filepath)
     sortedFiles = sorted(unsortedFiles, key=alphanumKey)
@@ -683,12 +687,12 @@ def setFrameObj(_obj, frameNum):
         # swap the meshes
         _obj.data = next_mesh
 
-        if _obj.mesh_sequence_settings.perFrameMaterial is False:
-            # if the previous mesh had a material, copy it to the new one
-            if(len(prev_mesh.materials) > 0):
-                _obj.data.materials.clear()
-                for material in prev_mesh.materials:
-                    _obj.data.materials.append(material)
+        if _obj.mesh_sequence_settings.perFrameMaterial is False and (
+            len(prev_mesh.materials) > 0
+        ):
+            _obj.data.materials.clear()
+            for material in prev_mesh.materials:
+                _obj.data.materials.append(material)
 
 
 def setFrameObjStreamed(obj, frameNum, forceLoad=False, deleteMaterials=False):
@@ -714,11 +718,13 @@ def setFrameObjStreamed(obj, frameNum, forceLoad=False, deleteMaterials=False):
             obj.data = next_mesh
 
             # if we need to, copy the materials from the old one onto the new one
-            if obj.mesh_sequence_settings.perFrameMaterial is False:
-                if len(prev_mesh.materials) > 0:
-                    obj.data.materials.clear()
-                    for material in prev_mesh.materials:
-                        obj.data.materials.append(material)
+            if (
+                obj.mesh_sequence_settings.perFrameMaterial is False
+                and len(prev_mesh.materials) > 0
+            ):
+                obj.data.materials.clear()
+                for material in prev_mesh.materials:
+                    obj.data.materials.append(material)
 
     if mss.cacheSize > 0 and mss.numMeshesInMemory > mss.cacheSize:
         idxToDelete = nextCachedMeshToDelete(obj, idx)
@@ -801,7 +807,7 @@ def bakeSequence(_obj):
     bpy.ops.object.empty_add(type='PLAIN_AXES')
     containerObj = bpy.context.active_object
     # rename the container object to "C_{object's current name}" ('C' stands for 'Container')
-    newName = "C_" + _obj.name
+    newName = f"C_{_obj.name}"
     containerObj.name = newName
 
     # copy the object's transformation data into the container
@@ -830,7 +836,7 @@ def bakeSequence(_obj):
         currentMesh = bpy.data.meshes[meshName.key]
         # even though it's kinda still part of a mesh sequence, it's not really anymore
         currentMesh.inMeshSequence = False
-        tmpObj = bpy.data.objects.new('o_' + currentMesh.name, currentMesh)
+        tmpObj = bpy.data.objects.new(f'o_{currentMesh.name}', currentMesh)
         activeCollection.objects.link(tmpObj)
         currentMesh.use_fake_user = False
         meshToObject[currentMesh] = tmpObj
